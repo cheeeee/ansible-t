@@ -20,14 +20,13 @@ from __future__ import annotations
 import errno
 import io
 import os
+import queue
 import signal
 import sys
 import textwrap
 import traceback
 import types
 import typing as t
-
-from multiprocessing.queues import Queue
 
 from ansible._internal import _task
 from ansible import constants as C
@@ -51,12 +50,30 @@ display = Display()
 current_worker = None
 
 
-class WorkerQueue(Queue):
-    """Queue that raises AnsibleError items on get()."""
-    def get(self, *args, **kwargs):
-        result = super(WorkerQueue, self).get(*args, **kwargs)
+class WorkerQueue:
+    """
+    One-way channel used by the controller to send intra-task updates (e.g. prompt responses) to a single worker.
+    Raises AnsibleError items on get().
+
+    A pipe is used instead of a multiprocessing queue, since each queue holds three named semaphores in the controller
+    for the life of the worker, and some platforms (e.g. musl libc) cap named semaphores per process at 256.
+    """
+
+    def __init__(self) -> None:
+        self._reader, self._writer = multiprocessing_context.Pipe(duplex=False)
+
+    def put(self, obj: object, block: bool = True, timeout: float | None = None) -> None:
+        self._writer.send(obj)
+
+    def get(self, block: bool = True, timeout: float | None = None) -> t.Any:
+        if not self._reader.poll(timeout if block else 0):
+            raise queue.Empty()
+
+        result = self._reader.recv()
+
         if isinstance(result, AnsibleError):
             raise result
+
         return result
 
 
@@ -98,7 +115,7 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
         # clear var to ensure we only delete files for this child
         self._loader._tempfiles = set()
 
-        self.worker_queue = WorkerQueue(ctx=multiprocessing_context)
+        self.worker_queue = WorkerQueue()
         self.worker_id = worker_id
 
         self._cliargs = cliargs

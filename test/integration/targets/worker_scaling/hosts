@@ -1,0 +1,5 @@
+[workers]
+host-[000:099]
+
+[workers:vars]
+ansible_connection=local

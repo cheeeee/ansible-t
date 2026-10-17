@@ -1,0 +1,2 @@
+bugfixes:
+  - ansible-playbook - Workers no longer hold named semaphores for their lifetime, which limited ``forks`` to about 80 on platforms with a per-process limit, such as musl libc (Alpine Linux), and caused tasks to be silently skipped for the remaining hosts (https://github.com/ansible/ansible/issues/82471).

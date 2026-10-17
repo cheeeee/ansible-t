@@ -1,0 +1,18 @@
+- hosts: workers
+  gather_facts: no
+  tasks:
+    - set_fact:
+        first_task_ran: true
+
+    # a second task reuses every worker slot
+    - set_fact:
+        second_task_ran: true
+
+- hosts: localhost
+  gather_facts: no
+  tasks:
+    - assert:
+        that:
+          - groups.workers | length == 100
+          - groups.workers | map('extract', hostvars) | selectattr('first_task_ran', 'defined') | length == 100
+          - groups.workers | map('extract', hostvars) | selectattr('second_task_ran', 'defined') | length == 100

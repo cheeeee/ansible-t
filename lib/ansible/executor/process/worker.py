@@ -20,10 +20,10 @@ from __future__ import annotations
 import errno
 import io
 import os
-import queue
 import signal
 import sys
 import textwrap
+import threading
 import traceback
 import types
 import typing as t
@@ -52,24 +52,32 @@ current_worker = None
 
 class WorkerQueue:
     """
-    One-way channel used by the controller to send intra-task updates (e.g. prompt responses) to a single worker.
+    One-way channel used by the controller to send replies (e.g. prompt responses) to a single worker.
     Raises AnsibleError items on get().
 
-    A pipe is used instead of a multiprocessing queue, since each queue holds three named semaphores in the controller
-    for the life of the worker, and some platforms (e.g. musl libc) cap named semaphores per process at 256.
+    A pipe is used instead of a multiprocessing queue, which holds three named semaphores in the controller for the
+    life of the worker, since some platforms (e.g. musl libc) cap named semaphores at 256 per process.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, maxsize: int = 0, *, ctx: object = None) -> None:
+        if maxsize > 0:
+            raise ValueError(f"{type(self).__name__} does not support a maximum size.")
+
         self._reader, self._writer = multiprocessing_context.Pipe(duplex=False)
+        self._put_lock = threading.Lock()
+        self._get_lock = threading.Lock()
 
-    def put(self, obj: object, block: bool = True, timeout: float | None = None) -> None:
-        self._writer.send(obj)
+    def put(self, obj: object) -> None:
+        with self._put_lock:
+            # the worker sends one request and waits for the reply, so a pending item means it is not receiving
+            if self._reader.poll(0):
+                raise RuntimeError(f"{type(self).__name__}: the worker has not received the previous item.")
 
-    def get(self, block: bool = True, timeout: float | None = None) -> t.Any:
-        if not self._reader.poll(timeout if block else 0):
-            raise queue.Empty()
+            self._writer.send(obj)
 
-        result = self._reader.recv()
+    def get(self) -> t.Any:
+        with self._get_lock:
+            result = self._reader.recv()
 
         if isinstance(result, AnsibleError):
             raise result
@@ -115,7 +123,7 @@ class WorkerProcess(multiprocessing_context.Process):  # type: ignore[name-defin
         # clear var to ensure we only delete files for this child
         self._loader._tempfiles = set()
 
-        self.worker_queue = WorkerQueue()
+        self.worker_queue = WorkerQueue(ctx=multiprocessing_context)
         self.worker_id = worker_id
 
         self._cliargs = cliargs

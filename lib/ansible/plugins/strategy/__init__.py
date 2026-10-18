@@ -385,6 +385,8 @@ class StrategyBase:
                 if worker_prc is None or not worker_prc.is_alive():
                     if worker_prc:
                         worker_prc.close()
+                        # do not leave a closed process in the slot if a new worker cannot be created
+                        self._workers[self._cur_worker] = None
 
                     self._blocked_hosts[host.name] = True
                     self._queued_task_cache[(host.name, task._uuid)] = {
@@ -426,9 +428,13 @@ class StrategyBase:
 
             self._pending_results += 1
         except (EOFError, OSError, AssertionError) as ex:
-            # most likely an abort
-            display.debug(f"got an error while queuing: {ex}")
-            return
+            if self._tqm._terminated:
+                # most likely an abort
+                display.debug(f"got an error while queuing: {ex}")
+                return
+
+            # continuing would silently skip this task for the host
+            raise AnsibleError(f"Unable to start a worker for host {host.name!r}.") from ex
         display.debug("exiting _queue_task() for %s/%s" % (host.name, task.action))
 
     def get_task_hosts(self, iterator, task_host, task):

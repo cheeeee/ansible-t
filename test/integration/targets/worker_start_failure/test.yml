@@ -1,0 +1,9 @@
+- hosts: workers
+  gather_facts: no
+  strategy: fail_worker_start
+  tasks:
+    - debug:
+        msg: first task
+
+    - debug:
+        msg: should not run

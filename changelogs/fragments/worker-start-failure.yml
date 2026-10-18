@@ -1,0 +1,2 @@
+bugfixes:
+  - ansible-playbook - A failure to start a worker process, such as a resource limit being reached, now aborts the run with an error instead of silently skipping the task for the affected hosts and exiting successfully.

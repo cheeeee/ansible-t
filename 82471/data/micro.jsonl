@@ -1,0 +1,4 @@
+{"label": "before", "libc": "musl", "py": "3.14.8", "create_us": 74.14, "roundtrip_us": 67.5, "fork_with_50_live_ms": 3.278}
+{"label": "after", "libc": "musl", "py": "3.14.8", "create_us": 5.59, "roundtrip_us": 16.6, "fork_with_50_live_ms": 2.458}
+{"label": "before", "libc": "glibc", "py": "3.15.0", "create_us": 61.2, "roundtrip_us": 46.67, "fork_with_50_live_ms": 2.777}
+{"label": "after", "libc": "glibc", "py": "3.15.0", "create_us": 6.82, "roundtrip_us": 10.23, "fork_with_50_live_ms": 2.613}
